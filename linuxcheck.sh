@@ -24,8 +24,12 @@ EOF
 
 
 date=$(date +%Y%m%d)
-check_file="tee -a $(mkdir /tmp/check_file_$(date +%s))/checkfile.txt"
-log_file="tee -a $(mkdir /tmp/log_file_$(date +%s))/logfile.txt"
+checkfile_dir="/tmp/check_file_$(date +%s)"
+logfile_dir="/tmp/log_file_$(date +%s)"
+mkdir $checkfile_dir
+mkdir $log_file_dir
+check_file="tee -a $checkfile_dir/checkfile.txt"
+log_file="tee -a $log_file_dir/logfile.txt"
 
 if [ $(whoami) != "root" ]; then
     echo -e "\e[1;31m 请以root权限运行 \e[0m"
@@ -37,7 +41,7 @@ if [ $name != 'Y' ];then
     exit 1
 fi
 
-echo --------------0.检测命令是否被修改---------
+echo --------------0.检测命令是否被修改--------- | ${check_file}
 year=$(stat /bin/ps | grep Change | awk '{print $2}' | awk -F- '{print $1}')
 mouth=$(stat /bin/ps | grep Change | awk '{print $2}' | awk -F- '{print $2}')
 day=$(stat /bin/ps | grep Change | awk '{print $2}' | awk -F- '{print $3}')
@@ -81,7 +85,7 @@ else
 fi
 
 
-echo --------------1.获取网络连接---------------
+echo --------------1.获取网络连接--------------- | ${check_file}
 pspid=$(netstat -antp | grep 'ESTABLISHED \| SYN_SENT \|SYN_RECEIVED' | awk '{print $7}'|cut -d "/" -f 1)
 for pid in $pspid; do
     dir=$(lsof -p $pid | awk '{print $9}')
@@ -89,26 +93,29 @@ for pid in $pspid; do
     printf "\n" | ${check_file}
 done
 
-echo --------------2.查看对外开放端口------------
+echo --------------2.查看对外开放端口------------ | ${check_file}
 listport=$(netstat -anltp | grep LISTEN | awk '{print $4,$7}'|sed 's/:/ /g' | awk '{print $2,$3}' | sed 's/\// /g'|awk '{print $1,$3}'|sort |uniq)
 if [ -n "$listport" ]; then
     echo -e "\e[1;31m 系统开放的端口和对应的服务为：\n $listport \e[0m"  | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo --------------3.查看是否存在高危端口---------
+echo --------------3.查看是否存在高危端口--------- | ${check_file}
 dangerport=$(netstat -anltp | awk '{print $4}'|sed 's/:/ /g'|awk '{print $2}'|sort |uniq)
 for i in $(cat danger.port);do
-    port=$($i | awk -F: '{print $1}')
-    desc=$($i | awk -F: '{print $2}')
-    process=$( $i | awk -F: '{print $3}')
-    if [[ $dangerport =~ $port ]];then
-        echo -e "\e[1;31m 存在高危端口${port},病毒类型${desc},病毒进程名${process}" | ${check_file}
-        printf "\n" | ${check_file}
-    fi
+    port=$(echo $i | awk -F: '{print $1}')
+    desc=$(echo $i | awk -F: '{print $2}')
+    process=$(echo $i | awk -F: '{print $3}')
+    for k in $dangerport:
+    do
+        if [[ "$k" == "$port" ]];then 
+            echo -e "\e[1;31m 存在高危端口$port,病毒类型$desc,病毒进程名$process" | ${check_file}
+            printf "\n" | ${check_file}
+        fi
+    done
 done
 
-echo ---------------4.查看启动项------------------
+echo ---------------4.查看启动项------------------ | ${check_file}
 enables=$(systemctl list-unit-files | grep enabled | awk '{print $1}')
 if [ -n $enables ];then
     echo -e "\e[1;31m 系统自启动项为以下：${enables}\e[0m"  | ${check_file}
@@ -117,7 +124,7 @@ else
     echo -e "\e[1;32m 系统没有自启动项！\e[0m"
 fi
 
-echo ---------------5.查看定时任务-----------------
+echo ---------------5.查看定时任务----------------- | ${check_file}
 crontab=$(cat /etc/crontab | grep "run-parts")
 if [ -n "$crontab" ];then
     echo -e "\e[1;31m 系统定时任务为：\n${crontab}\e[0m"  |  ${check_file}
@@ -126,7 +133,7 @@ else
     echo -e "\e[1;32m 系统不存在定时任务！\e[0m"
 fi
 
-echo ---------------6.查看调度任务------------------
+echo ---------------6.查看调度任务------------------ | ${check_file}
 cron=$(crontab -l)
 if [ -n "$cron" ];then
     echo -e "\e[1;31m 调度任务为：\n ${cron} \e[0m"  |  ${check_file}
@@ -135,7 +142,7 @@ else
     echo -e "\e[1;32m 没有调度任务。\e[0m"
 fi
 
-echo ---------------7.检测cpu异常进程---------------
+echo ---------------7.检测cpu异常进程--------------- | ${check_file}
 processpid=$(ps -aux | awk 'NR!=1{print $2,$3}' | sed 's/\./ /g'|awk '{print $1,$2}')
 echo -e "\e[1;32m cpu占用前五的进程：\n $(ps -aux | sort -nr -k 3 | head -5) \e[0m" | ${check_file}
 printf "\n" | ${check_file}
@@ -151,7 +158,7 @@ if [ -n "$processpid" ];then
     printf "\n" | ${log_file}
 fi
 
-echo ---------------8.检测特权用户------------------
+echo ---------------8.检测特权用户------------------ | ${check_file}
 uiduser=$(awk -F: '$3==0{print $1}' /etc/passwd | grep -v root)
 giduser=$(awk -F: '$4==0{print $1}' /etc/passwd | grep -v root)
 lenuser=$(awk -F: 'length($2)==0 {print $1}' /etc/shadow)
@@ -173,46 +180,46 @@ if [ $nopasswd ];then
     printf "\n"| ${check_file}
 fi
 
-echo ---------------9.查看登陆用户------------------
+echo ---------------9.查看登陆用户------------------ | ${check_file}
 echo -e "\e[1;31m 正在登陆的用户有：\n $(who)" | ${check_file}
 printf "\n" | ${check_file}
 
-echo ---------------10.可登录用户-------------------
-loginuser=$(cat /etc/passwd | grep -E "/bin/bash$" | awk -F: '{print $1}')
+echo ---------------10.可登录用户------------------- | ${check_file}
+loginuser=$(cat /etc/passwd | grep -E "/bin/bash$|/bin/zsh$|/bin/sh$" | awk -F: '{print $1}')
 if [ -n "$loginuser" ];then
     echo -e "\e[1;31m 可登录的用户有：\n ${loginuser} \e[0m" | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo ---------------11.最近修改过的文件---------------
+echo ---------------11.最近修改过的文件--------------- | ${check_file}
 changefile=$(find / -ctime 5)
 if [ -n "$changefile" ];then
     echo -e "\e[1;31m 最近修改过的文件有：\n ${changefile} \e[0m" | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo ---------------12.查看是否存在可疑命令-------------
+echo ---------------12.查看是否存在可疑命令------------- | ${check_file}
 command=$(history | grep -E "(wget|curl|nc|nmap|\.sh|useradd|adduser|userdel|passwd)")
 if [ -n "$command" ];then
     echo -e "\e[1;31m 存在以下可疑的操作命令: ${command}\e[0m" | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo ----------------13.root是否允许远程登陆------------
+echo ----------------13.root是否允许远程登陆------------ | ${check_file}
 root=$(cat /etc/ssh/sshd_config |grep -v ^# | grep "PermitRootLogin yes")
 if [ -n "$root" ];then
     echo -e "\e[1;31m 允许root远程登陆 \e[0m" | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo ----------------14.检查是否存在可疑脚本-------------
-script=$(find / *.* | grep "\.(py|sh|per|pl)$"| grep -v "/usr|/etc|/var")
+echo ----------------14.检查是否存在可疑脚本------------- | ${check_file}
+script=$(find / *.* | grep -E "\.(py|sh|per|pl)$"| grep -vE "/usr|/etc|/var")
 if [ -n "$script" ];then
     echo -e "\e[1;31m 发现存在以下脚本文件${script} \e[0m" | ${check_file}
     printf "\n" | ${check_file}
 fi
 
-echo ----------------15.日志文件打包--------------------
+echo ----------------15.日志文件打包-------------------- | ${check_file}
 echo -e "\e[1;32m 正在打包日志......\e[0m"
 tar -czf /tmp/system_log.tar.gz /var/log/
 if [ $? -eq 0 ]; then
@@ -221,7 +228,7 @@ else
     echo -e "\e[1;31m 日志打包失败 \e[0m"
 fi
 
-echo ----------------16.查看登陆到主机的用户---------------
+echo ----------------16.查看登陆到主机的用户--------------- | ${check_file}
 last=$(last)
 lastlog=$(lastlog)
 echo -e "\e[1;32m 登陆到主机的用户: \n${last} \e[0m" | ${check_file}
@@ -231,7 +238,7 @@ if [ -n "$lastlog" ];then
     printf "\n" | ${check_file}
 fi
 
-echo ----------------17.检查磁盘使用量---------------------
+echo ----------------17.检查磁盘使用量--------------------- | ${check_file}
 df=$(df -h | awk 'NR!=1{print $1,$5}'|awk '{print $1,$2}'|awk -F% '{print $1,$2}')
 for i in "$df";do
     dir=$(echo $i|awk '{print $1}')
