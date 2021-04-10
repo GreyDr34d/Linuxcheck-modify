@@ -1,5 +1,5 @@
 # Linuxcheck
-
+基于 MisakiKata/Linuxcheck，实际使用的时候发现某些代码会出现报错，这是我修改后的版本。
 ```
 检测项如下
 0.检测命令是否被修改
